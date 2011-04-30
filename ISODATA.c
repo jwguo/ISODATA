@@ -33,7 +33,11 @@ typedef struct
     int    core;
 } FVector, Center;
 
-void readData(FILE *fp, Center **pCenters, int *centerNdx, FVector **pFVectors, int *fVectorNdx);
+void readData(FILE     *fp,
+              Center  **pCenters,
+              int      *centerNdx,
+              FVector **pFVectors,
+              int      *fVectorNdx);
 void _readFVector(FVector **pFVector, int *index, int *total, char *token);
 void didayDynamicClusterMethod(FVector *pFVectors,
                                int      fVectorTotal,
@@ -88,7 +92,11 @@ int main(int argc, char **argv)
     return 0;
 }
 
-void readData(FILE *fp, Center **pCenters, int *centerNdx, FVector **pFVectors, int *fVectorNdx)
+void readData(FILE     *fp,
+              Center  **pCenters,
+              int      *centerNdx,
+              FVector **pFVectors,
+              int      *fVectorNdx)
 {
     char  lineBuf[LINE_BUF_SIZE];
     char *token;
@@ -104,15 +112,22 @@ void readData(FILE *fp, Center **pCenters, int *centerNdx, FVector **pFVectors, 
             continue;
         }
         token = strtok(lineBuf, delim);
-        if (0 == flag) {
+        if (0 == flag)
             // read initial cluster centers
-            _readFVector(*pCenters, *centerNdx, &centerTotal, token);
-        } else if (1 == flag) {
+            _readFVector(&*pCenters, &*centerNdx, &centerTotal, token);
+        else if (1 == flag)
             // read sample feature vectors
-            _readFVector(*pFVectors, *fVectorNdx, &fVectorTotal, token);
-        }
+            _readFVector(&*pFVectors, &*fVectorNdx, &fVectorTotal, token);
     }
     int i;
+    printf("Centers:\n");
+    for (i = 0; i < *centerNdx; i++) {
+        printf("(%d, %d, %d, %d)\n", (int)(*pCenters)[i].w,
+                                     (int)(*pCenters)[i].x,
+                                     (int)(*pCenters)[i].y,
+                                     (int)(*pCenters)[i].z);
+    }
+    printf("\nSample vectors:\n");
     for (i = 0; i < *fVectorNdx; i++) {
         printf("(%d, %d, %d, %d)\n", (int)(*pFVectors)[i].w,
                                      (int)(*pFVectors)[i].x,
