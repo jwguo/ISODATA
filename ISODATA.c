@@ -307,7 +307,7 @@ void classify(FVector **pFVectors,
     for (i = 0; i < fVectorNdx; i++) {
         minDist = MAXFLOAT;
         pCenter = &(pNewCenters[0]);
-        while(NULL != pCenter) {
+        while (NULL != pCenter) {
             tmpDouble = twoNorm(*(pFVectors[i]), *pCenter);
             if (tmpDouble > minDist) {
                 minDist      = tmpDouble;
