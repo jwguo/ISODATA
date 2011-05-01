@@ -39,11 +39,22 @@ void readData(FILE     *fp,
               FVector **pFVectors,
               int      *fVectorNdx);
 void _readFVector(FVector **pFVector, int *index, int *total, char *token);
-void didayDynamicClusterMethod(FVector *pFVectors,
-                               int      fVectorTotal,
-                               int      clusterCnt,
-                               int     *pCoreCnt,
-                               int      iteration);
+void isodata(Center  *pInitCenters,
+             int      initCenterNdx,
+             FVector *pFVectors,
+             int      fVectorNdx,
+             int      desiredClusterNum,
+             int      clusterSizeMin,
+             double   stdDeviationThresh,
+             double   splitFraction,
+             double   lumpThresh,
+             int      lumpPairMaxPerIt,
+             int      iterationMax);
+//void didayDynamicClusterMethod(FVector *pFVectors,
+//                               int      fVectorTotal,
+//                               int      clusterCnt,
+//                               int     *pCoreCnt,
+//                               int      iteration);
 double twoNorm(FVector a, FVector b);
 double distCE(FVector  *pFVectors,
               int       fVectorTotal,
@@ -88,6 +99,18 @@ int main(int argc, char **argv)
             coreCnt[i] = N3;
     }
     didayDynamicClusterMethod(pFVectors, fVectorNdx, DESIRED_CLUSTER_NUM, coreCnt, ITERATION_MAX);*/
+
+    isodata(pCenters,
+            centerNdx,
+            pFVectors,
+            fVectorNdx,
+            DESIRED_CLUSTER_NUM,
+            CLUSTER_SIZE_MIN,
+            STD_DEVIATION_THRESH,
+            SPLIT_FRACTION,
+            LUMP_THRESH,
+            LUMP_PAIR_MAX_PER_IT,
+            ITERATION_MAX);
 
     return 0;
 }
@@ -165,7 +188,40 @@ void _readFVector(FVector **pFVector, int *index, int *total, char *token)
     }
 }
 
-void didayDynamicClusterMethod(FVector *pFVectors,
+void isodata(Center  *pInitCenters,
+             int      initCenterNdx,
+             FVector *pFVectors,
+             int      fVectorNdx,
+             int      desiredClusterNum,
+             int      clusterSizeMin,
+             double   stdDeviationThresh,
+             double   splitFraction,
+             double   lumpThresh,
+             int      lumpPairMaxPerIt,
+             int      iterationMax)
+{
+    int     i;
+    int     changeFlag;
+    int     realClusterNum;
+    int     splitFlag[iterationMax];
+    int     lumpFlag[iterationMax];
+    Center *pNewCenters  = calloc(initCenterNdx, sizeof(Center));
+    int     newCenterNdx = initCenterNdx;
+
+    // step 1: initialize {split,lump}Flag
+    for (i = 0; i < iterationMax; i++)
+        splitFlag[i] = lumpFlag[i] = 2;
+
+    // step 2: apply new centers, and classify sample feature vectors
+    realClusterNum = centerNdx;
+    changeFlag     = 1;
+    for (i = 0; i < newCenterNdx; i++)
+        pNewCenters[i] = pInitCenters[i];
+
+    // step 3
+}
+
+/*void didayDynamicClusterMethod(FVector *pFVectors,
                                int      fVectorTotal,
                                int      clusterCnt,
                                int     *pCoreCnt,
@@ -287,7 +343,7 @@ void didayDynamicClusterMethod(FVector *pFVectors,
         printf("# of cluster %d: %d\n", i, memberCnts[i]);
 
     printf("\nmin( D(C,E) ): %f\n", minDistCE);
-}
+}*/
 
 double twoNorm(FVector a, FVector b)
 {
