@@ -16,6 +16,7 @@
 #define LUMP_THRESH 12 // for lumping unit: distance
 #define LUMP_PAIR_MAX_PER_IT 2
 #define ITERATION_MAX 20
+#define EPSILON 0.001 // threshold for determining changeFlag
 #define DATA_PATH "./data.txt"
 // ============================================================================
 
@@ -23,14 +24,17 @@
 #define TOKEN_BUF_SIZE 32
 #define INIT_FEATURE_VECTOR_NUM 16
 
-typedef struct
+typedef struct FVector
 {
-    double w;
-    double x;
-    double y;
-    double z;
-    int    cluster;
-    int    core;
+    double          w;
+    double          x;
+    double          y;
+    double          z;
+    int             cluster;
+    int             core;
+    struct FVector *pNextMember;
+    struct FVector *pNextCenter;
+    int             totalMembers;
 } FVector, Center;
 
 void readData(FILE     *fp,
@@ -49,7 +53,11 @@ void isodata(Center  *pInitCenters,
              double   splitFraction,
              double   lumpThresh,
              int      lumpPairMaxPerIt,
-             int      iterationMax);
+             int      iterationMax,
+             double   epsilon);
+void classify(FVector **pFVectors,
+              int       fVectorNdx,
+              Center   *pNewCenters);
 //void didayDynamicClusterMethod(FVector *pFVectors,
 //                               int      fVectorTotal,
 //                               int      clusterCnt,
@@ -72,7 +80,6 @@ void randCore(FVector  *pFVectors,
 
 int main(int argc, char **argv)
 {
-    int  i;
     FILE *fp;
 
     fp = fopen(DATA_PATH, "r");
@@ -110,7 +117,8 @@ int main(int argc, char **argv)
             SPLIT_FRACTION,
             LUMP_THRESH,
             LUMP_PAIR_MAX_PER_IT,
-            ITERATION_MAX);
+            ITERATION_MAX,
+            EPSILON);
 
     return 0;
 }
@@ -176,9 +184,12 @@ void _readFVector(FVector **pFVector, int *index, int *total, char *token)
             (*pFVector)[*index].y = atof(token);
         } else if ('z' == compo) {
             compo = 'w';
-            (*pFVector)[*index].cluster = -1;
-            (*pFVector)[*index].core  = -1;
-            (*pFVector)[(*index)++].z = atof(token);
+            (*pFVector)[*index].cluster     = -1;
+            (*pFVector)[*index].core        = -1;
+            (*pFVector)[*index].pNextMember = NULL;
+            (*pFVector)[*index].pNextCenter = NULL;
+            (*pFVector)[*index].totalMembers       = 0;
+            (*pFVector)[(*index)++].z       = atof(token);
             if (*total <= *index) {
                 (*total) += 2 * INIT_FEATURE_VECTOR_NUM;
                 *pFVector = realloc(*pFVector, sizeof(FVector) * (*total));
@@ -198,27 +209,117 @@ void isodata(Center  *pInitCenters,
              double   splitFraction,
              double   lumpThresh,
              int      lumpPairMaxPerIt,
-             int      iterationMax)
+             int      iterationMax,
+             double   epsilon)
 {
-    int     i;
-    int     changeFlag;
-    int     realClusterNum;
-    int     splitFlag[iterationMax];
-    int     lumpFlag[iterationMax];
-    Center *pNewCenters  = calloc(initCenterNdx, sizeof(Center));
-    int     newCenterNdx = initCenterNdx;
+    int      i, j;
+    int      changeFlag;
+    int      clusterCntChangeFlag = 0;
+    int      realClusterNum;
+    int      splitFlag[iterationMax];
+    int      lumpFlag[iterationMax];
+    Center  *pNewCenters  = calloc(initCenterNdx, sizeof(Center));
+    int      newCenterNdx = initCenterNdx;
+    FVector *pMember;
+    int      memberCnt;
 
     // step 1: initialize {split,lump}Flag
     for (i = 0; i < iterationMax; i++)
         splitFlag[i] = lumpFlag[i] = 2;
 
     // step 2: apply new centers, and classify sample feature vectors
-    realClusterNum = centerNdx;
+    realClusterNum = initCenterNdx;
     changeFlag     = 1;
-    for (i = 0; i < newCenterNdx; i++)
+    pNewCenters[0] = pInitCenters[0];
+    for (i = 1; i < newCenterNdx; i++) {
         pNewCenters[i] = pInitCenters[i];
+        pNewCenters[i-1].pNextCenter = &(pNewCenters[i]);
+    }
 
-    // step 3
+    FVector* classifiedFVectors[fVectorNdx];
+    for (i = 0; i < fVectorNdx; i++)
+        classifiedFVectors[i] = &(pFVectors[i]);
+    classify(classifiedFVectors, fVectorNdx, pNewCenters);
+
+    // step 3: remove clusters that have not enough members
+    for (i = 0; i < newCenterNdx; i++) {
+        if (pNewCenters[i].totalMembers < clusterSizeMin) {
+            // members not enough, reclassify members in  this cluster
+            clusterCntChangeFlag = 1;
+            memberCnt = pNewCenters[i].totalMembers;
+            realClusterNum--;
+            if (0 == i) {
+                pNewCenters[i] = pNewCenters[i + 1];
+
+            } else
+                pNewCenters[i - 1].pNextCenter = pNewCenters[i].pNextCenter;
+
+            FVector* pReclassifiedFVectors[memberCnt];
+            pMember = pNewCenters[i].pNextMember;
+            for (j = 0; j < memberCnt; j++) {
+                pReclassifiedFVectors[j] = pMember;
+                pMember = pMember->pNextMember;
+            }
+            classify(pReclassifiedFVectors, memberCnt, pNewCenters);
+        }
+    }
+
+    // step 4: calculate new centers and decide changeFlag
+    Center *pCenter = &(pNewCenters[0]);
+    Center newCenter[realClusterNum];
+    double totalDiff = 0;
+    for (i = 0; i < realClusterNum; i++) {
+        pMember = pCenter->pNextMember;
+        while (NULL != pMember) {
+            newCenter[i].w += pMember->w;
+            newCenter[i].x += pMember->x;
+            newCenter[i].y += pMember->y;
+            newCenter[i].z += pMember->z;
+
+            pMember = pMember->pNextMember;
+        }
+        memberCnt = pCenter->totalMembers;
+        newCenter[i].w /= memberCnt;
+        newCenter[i].x /= memberCnt;
+        newCenter[i].y /= memberCnt;
+        newCenter[i].z /= memberCnt;
+
+        totalDiff += twoNorm(newCenter[i], *pCenter);
+        pCenter = pCenter->pNextCenter;
+    }
+    if (0 == clusterCntChangeFlag && totalDiff < epsilon)
+        changeFlag = 0;
+
+    // step 5:
+}
+
+void classify(FVector **pFVectors,
+              int       fVectorNdx,
+              Center   *pNewCenters)
+{
+    int      i;
+    double   tmpDouble;
+    double   minDist;
+    FVector *pCandidate;
+    FVector *child;
+    Center  *pCenter;
+
+    for (i = 0; i < fVectorNdx; i++) {
+        minDist = MAXFLOAT;
+        pCenter = &(pNewCenters[0]);
+        while(NULL != pCenter) {
+            tmpDouble = twoNorm(*(pFVectors[i]), *pCenter);
+            if (tmpDouble > minDist) {
+                minDist      = tmpDouble;
+                pCandidate   = pCenter;
+            }
+            pCenter = pCenter->pNextCenter;
+        }
+        child = pCandidate->pNextMember;
+        pCandidate->pNextMember = pFVectors[i];
+        pFVectors[i]->pNextMember = child;
+        (pCandidate->totalMembers)++;
+    }
 }
 
 /*void didayDynamicClusterMethod(FVector *pFVectors,
@@ -347,7 +448,8 @@ void isodata(Center  *pInitCenters,
 
 double twoNorm(FVector a, FVector b)
 {
-    return (pow(pow(a.x - b.x, 2) +
+    return (pow(pow(a.w - b.w, 2) +
+                pow(a.x - b.x, 2) +
                 pow(a.y - b.y, 2) +
                 pow(a.z - b.z, 2), 0.5));
 }
