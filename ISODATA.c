@@ -2,7 +2,7 @@
  *
  * The dimension of feature vectors should be made programmable
  *
- * ***************************************************************************/
+ * ****************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +10,7 @@
 #include <math.h>
 #include <time.h>
 
-// ==========need to change to command line options============================
+// ===========need to change to command line options============================
 #define DIMENSION 4
 #define DESIRED_CLUSTER_NUM 6
 #define CLUSTER_SIZE_MIN 3 // m0
@@ -63,8 +63,16 @@ void isodata(Center  *pInitCenters,
 void classify(FVector **pFVectors,
               int       fVectorNdx,
               Center   *pNewCenters);
-void _split(int *pSplitFlag, Center *pCenter);
-void _lump(int *pLumpFlag, Center *pCenter);
+int _split(int    *pSplitFlag,
+            Center *pCenter,
+            int     realClusterNum,
+            double  stdDeviationThresh,
+            int     desiredClusterNum,
+            double  avgDistToCenters,
+            double *pAvgDistToCenter,
+            int     clusterSizeMin);
+void __split();
+void _lump(int *pLumpFlag, Center *pCenter, int realClusterNum);
 //void didayDynamicClusterMethod(FVector *pFVectors,
 //                               int      fVectorTotal,
 //                               int      clusterCnt,
@@ -104,6 +112,10 @@ int main(int argc, char **argv)
 
     int splitFlag[ITERATION_MAX];
     int lumpFlag[ITERATION_MAX];
+    /* flag meaning: 0: splitting or lumping starts
+     *               1: splitting or lumping is completed successfully
+     *               2: flag's initial state after the i'th iteration
+     * ************************************************************************/
     // step 1: initialize {split,lump}Flag
     for (i = 0; i < ITERATION_MAX; i++)
         splitFlag[i] = lumpFlag[i] = 2;
@@ -291,13 +303,21 @@ void isodata(Center  *pInitCenters,
 
     // step 5: calculate average distance to centers
     double avgDistToCenters = 0;
+    double avgDistToCenter[realClusterNum];
+    double dist;
+    for (i = 0; i < realClusterNum; i++)
+        avgDistToCenter[i] = 0;
+
     pCenter = &(pNewCenters[0]);
-    while (NULL != pCenter) {
+    for (i = 0; i < realClusterNum; i++) {
         pMember = pCenter->pNextMember;
         while (NULL != pMember) {
-            avgDistToCenters += twoNorm(*pMember, *pCenter);
+            dist = twoNorm(*pMember, *pCenter);
+            avgDistToCenter[i] += dist;
+            avgDistToCenters   += dist;
             pMember = pMember->pNextMember;
         }
+        avgDistToCenter[i] /= pCenter->totalMembers;
         pCenter = pCenter->pNextCenter;
     }
     avgDistToCenters /= fVectorNdx;
@@ -310,18 +330,32 @@ void isodata(Center  *pInitCenters,
         return;
     } else if (realClusterNum <= (desiredClusterNum + 1) / 2) {
         // split
-        _split(&(pSplitFlags[loopCnt]), pNewCenters);
+        _split(&(pSplitFlags[loopCnt]),
+               pNewCenters,
+               realClusterNum,
+               stdDeviationThresh,
+               desiredClusterNum,
+               avgDistToCenters,
+               avgDistToCenter,
+               clusterSizeMin);
     } else if (realClusterNum >= 2 * desiredClusterNum) {
         // lump
-        _lump(&(pSplitFlags[loopCnt]), pNewCenters);
+        _lump(&(pSplitFlags[loopCnt]), pNewCenters, realClusterNum);
     } else if (1 == loopCnt % 2) {
         // odd, then split
         printf("ODD: ");
-        _split(&(pSplitFlags[loopCnt]), pNewCenters);
+        _split(&(pSplitFlags[loopCnt]),
+               pNewCenters,
+               realClusterNum,
+               stdDeviationThresh,
+               desiredClusterNum,
+               avgDistToCenters,
+               avgDistToCenter,
+               clusterSizeMin);
     } else if (0 == loopCnt % 2) {
         // even, then lump
         printf("EVEN: ");
-        _lump(&(pSplitFlags[loopCnt]), pNewCenters);
+        _lump(&(pSplitFlags[loopCnt]), pNewCenters, realClusterNum);
     }
 }
 
@@ -337,7 +371,7 @@ void classify(FVector **pFVectors,
     Center  *pCenter;
 
     for (i = 0; i < fVectorNdx; i++) {
-        minDist = MAXFLOAT;
+        minDist = DBL_MAX;
         pCenter = &(pNewCenters[0]);
         while (NULL != pCenter) {
             tmpDouble = twoNorm(*(pFVectors[i]), *pCenter);
@@ -354,18 +388,76 @@ void classify(FVector **pFVectors,
     }
 }
 
-void _split(int *pSplitFlag, Center *pCenter)
+int _split(int    *pSplitFlag,
+            Center *pCenter,
+            int     realClusterNum,
+            double  stdDeviationThresh,
+            int     desiredClusterNum,
+            double  avgDistToCenters,
+            double *pAvgDistToCenter,
+            int     clusterSizeMin)
 {
+    // step 7:
     printf("SPLIT\n");
-    int i;
+    int      i, j;
+    double   sigma[realClusterNum][DIMENSION];
+    // add one more column to store max sigmas
+    Center  *_pCenter;
+    FVector *pMember;
+
+    for (i = 0; i < realClusterNum; i++)
+        for (j = 0; j < DIMENSION; j++)
+            sigma[i][j] = 0;
 
     *pSplitFlag = 0;
-    for (i = 0; i < DIMENSION; i++) {
+    _pCenter = pCenter;
+    for (i = 0; i < realClusterNum; i++) {
+        pMember = _pCenter->pNextMember;
+        while (NULL != pMember) {
+            for (j = 0; j < DIMENSION; j++) {
+                if (0 == j)
+                    sigma[i][j] += pow(pMember->w - _pCenter->w, 2); // !!
+                else if (1 == j)
+                    sigma[i][j] += pow(pMember->x - _pCenter->x, 2);
+                else if (2 == j)
+                    sigma[i][j] += pow(pMember->y - _pCenter->y, 2);
+                else if (3 == j)
+                    sigma[i][j] += pow(pMember->z - _pCenter->z, 2);
+            }
+            pMember = pMember->pNextMember;
+        }
+        for (j = 0; j < DIMENSION; j++)
+            sigma[i][j] = pow(sigma[i][j] / _pCenter->totalMembers, 0.5);
+        _pCenter = _pCenter->pNextCenter;
+    }
 
+    // step 8:
+    _pCenter = pCenter;
+    for (i = 0; i < realClusterNum; i++) {
+        for (j = 0; j < DIMENSION; j++) {
+            if (sigma[i][j] > stdDeviationThresh) {
+                if (realClusterNum <= (desiredClusterNum + 1) / 2 ||
+                    pAvgDistToCenter[i] > avgDistToCenters ||
+                    _pCenter->totalMembers >= 2 * clusterSizeMin) {
+                    __split();
+                    if (1 == *pSplitFlag)
+                        // splitting is completed successfully
+                        return *pSplitFlag;
+                    else {
+                    }
+                }
+            }
+        }
+        _pCenter = _pCenter->pNextCenter;
     }
 }
 
-void _lump(int *pLumpFlag, Center *pCenter)
+void __split()
+{
+
+}
+
+void _lump(int *pLumpFlag, Center *pCenter, int realClusterNum)
 {
     printf("LUMP\n");
 }
