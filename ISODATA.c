@@ -1,4 +1,5 @@
-/* 9913525. Jing-Wei, Guo
+/* 9913525. Jing-Wei Guo, 2011/05/05
+ * Use gplv2 license
  *
  * The dimension of feature vectors should be made programmable
  *
@@ -44,7 +45,6 @@ typedef struct Dist
     Center      *pCenter1;
     Center      *pCenter2;
     struct Dist *pNext;
-
 } Dist;
 
 void readData(FILE     *fp,
@@ -123,40 +123,32 @@ int main(int argc, char **argv)
     for (i = 0; i < ITERATION_MAX; i++)
         splitFlag[i] = lumpFlag[i] = 2;
     int loopFlag = 1;
-    while (1 == loopFlag) {
-        loopFlag = isodata(&pCenters,
-                           pFVectors,
-                           fVectorNdx,
-                           DESIRED_CLUSTER_NUM,
-                           CLUSTER_SIZE_MIN,
-                           STD_DEVIATION_THRESH,
-                           SPLIT_FRACTION,
-                           LUMP_THRESH,
-                           LUMP_PAIR_MAX_PER_IT,
-                           ITERATION_MAX,
-                           EPSILON,
-                           splitFlag,
-                           lumpFlag);
-        //Center *pCenter = pCenters;
-        //FVector *pMember;
-        //while (NULL != pCenter) {
-        //    printf("\nIn center (%f, %f, %f, %f):\n",
-        //           pCenter->w,
-        //           pCenter->x,
-        //           pCenter->y,
-        //           pCenter->z);
-        //    pMember = pCenter->pNextMember;
-        //    while (NULL != pMember) {
-        //        printf("\t(%d, %d, %d, %d):\n",
-        //                (int)pMember->w,
-        //                (int)pMember->x,
-        //                (int)pMember->y,
-        //                (int)pMember->z);
+    while (1 == loopFlag)
+        loopFlag = isodata(&pCenters, pFVectors, fVectorNdx,
+                           DESIRED_CLUSTER_NUM, CLUSTER_SIZE_MIN,
+                           STD_DEVIATION_THRESH, SPLIT_FRACTION, LUMP_THRESH,
+                           LUMP_PAIR_MAX_PER_IT, ITERATION_MAX, EPSILON,
+                           splitFlag, lumpFlag);
 
-        //        pMember = pMember->pNextMember;
-        //    }
-        //    pCenter = pCenter->pNextCenter;
-        //}
+    Center *pCenter = pCenters;
+    FVector *pMember;
+    while (NULL != pCenter) {
+        printf("\nIn center (%f, %f, %f, %f), total member #: %d\n",
+               pCenter->w,
+               pCenter->x,
+               pCenter->y,
+               pCenter->z,
+               pCenter->totalMembers);
+        pMember = pCenter->pNextMember;
+        while (NULL != pMember) {
+            printf("\t(%d, %d, %d, %d)\n",
+                   (int)pMember->w,
+                   (int)pMember->x,
+                   (int)pMember->y,
+                   (int)pMember->z);
+            pMember = pMember->pNextMember;
+        }
+        pCenter = pCenter->pNextCenter;
     }
     return 0;
 }
@@ -193,23 +185,6 @@ void readData(FILE     *fp,
     for (i = 0; i < *centerNdx - 1; i++)
         (*pCenters)[i].pNextCenter = &((*pCenters)[i + 1]);
     (*pCenters)[0].totalCenters = *centerNdx;
-
-    // ==================TEST MESSAGE===========================================
-    printf("Centers:\n");
-    for (i = 0; i < *centerNdx; i++) {
-        printf("(%d, %d, %d, %d)\n", (int)(*pCenters)[i].w,
-                                     (int)(*pCenters)[i].x,
-                                     (int)(*pCenters)[i].y,
-                                     (int)(*pCenters)[i].z);
-    }
-    printf("\nSample vectors:\n");
-    for (i = 0; i < *fVectorNdx; i++) {
-        printf("(%d, %d, %d, %d)\n", (int)(*pFVectors)[i].w,
-                                     (int)(*pFVectors)[i].x,
-                                     (int)(*pFVectors)[i].y,
-                                     (int)(*pFVectors)[i].z);
-    }
-    // =========================================================================
 }
 
 void _readFVector(FVector **pFVector, int *index, int *total, char *token)
@@ -258,43 +233,29 @@ int isodata(Center **pCenters,
             int     *pLumpFlags)
 {
     static int loopCnt = 0;
-    int      i, j, rc;
-    int      changeFlag;
-    int      clusterCntChangeFlag = 0;
-    int      realClusterNum;
-    FVector *pMember;
-    int      memberCnt;
-    Center  *pCenter;
-    Center  *_pCenters = *pCenters;
+    int        i, j, rc;
+    int        changeFlag;
+    int        clusterCntChangeFlag = 0;
+    int        realClusterNum;
+    FVector   *pMember;
+    int        memberCnt;
+    Center    *pCenter;
+    Center    *_pCenters = *pCenters;
 
     // step 2: classify sample feature vectors
+    pCenter = *pCenters;
+    for (i = 0; i < _pCenters[0].totalCenters; i++) {
+        pCenter->pNextMember  = NULL;
+        pCenter->totalMembers = 0;
+        pCenter = pCenter->pNextCenter;
+    }
     changeFlag = 1;
     FVector* classifiedFVectors[totalFVectors];
-    for (i = 0; i < totalFVectors; i++)
-        classifiedFVectors[i] = &(pFVectors[i]);
+    for (i = 0; i < totalFVectors; i++) {
+        pFVectors[i].pNextMember = NULL;
+        classifiedFVectors[i]    = &(pFVectors[i]);
+    }
     classify(classifiedFVectors, totalFVectors, _pCenters);
-    // =====================================================
-    //pCenter = *pCenters;
-    //while (NULL != pCenter) {
-    //    printf("\nIn center (%d, %d, %d, %d):\n",
-    //            (int)pCenter->w,
-    //            (int)pCenter->x,
-    //            (int)pCenter->y,
-    //            (int)pCenter->z);
-    //    pMember = pCenter->pNextMember;
-    //    while (NULL != pMember) {
-    //        printf("\t(%d, %d, %d, %d):\n",
-    //                (int)pMember->w,
-    //                (int)pMember->x,
-    //                (int)pMember->y,
-    //                (int)pMember->z);
-
-    //        pMember = pMember->pNextMember;
-    //    }
-    //    pCenter = pCenter->pNextCenter;
-    //}
-
-    // ================================================
 
     // step 3: remove clusters that have not enough members
     realClusterNum = _pCenters[0].totalCenters;
@@ -326,10 +287,14 @@ int isodata(Center **pCenters,
     _pCenters[0].totalCenters = realClusterNum;
 
     // step 4: calculate new centers and decide changeFlag
-    pCenter = &(_pCenters[0]);
+    pCenter = *pCenters;
     Center newCenter[realClusterNum];
     double totalDiff = 0;
     for (i = 0; i < realClusterNum; i++) {
+        newCenter[i].w = 0;
+        newCenter[i].x = 0;
+        newCenter[i].y = 0;
+        newCenter[i].z = 0;
         pMember = pCenter->pNextMember;
         while (NULL != pMember) {
             newCenter[i].w += pMember->w;
@@ -467,7 +432,6 @@ int _split(int      changeFlag,
            double   splitFraction)
 {
     // step 7: calculate standard deviations and find the max.
-    printf("SPLIT\n");
     int      i, j;
     int      oldClusterNum = (*pCenters)[0].totalCenters;
     double   sigma[oldClusterNum][DIMENSION + 2];
@@ -479,10 +443,10 @@ int _split(int      changeFlag,
         for (j = 0; j < DIMENSION; j++)
             sigma[i][j] = 0;
 
-    int candidateNdx;
+    int    candidateNdx;
     double maxSigma;
     *pSplitFlag = 0;
-    pCenter = &((*pCenters)[0]);
+    pCenter     = &((*pCenters)[0]);
     for (i = 0; i < oldClusterNum; i++) {
         pMember = pCenter->pNextMember;
         while (NULL != pMember) {
@@ -549,16 +513,21 @@ void __split(int       index,
     int     i;
     int     oldCenterCnt = (*pCenters)[0].totalCenters;
     Center *pCenter;
+    Center *pLastCenter;
     Center *pNewCenters = calloc(++((*pCenters)[0].totalCenters), sizeof(Center));
-
-    pCenter     = &((*pCenters)[0]);
+ 
+    pCenter = &((*pCenters)[0]);
+    pLastCenter = NULL;
     for (i = 0; i < oldCenterCnt; i++) {
         pNewCenters[i] = *pCenter;
+        if (NULL != pLastCenter)
+            pLastCenter->pNextCenter = &(pNewCenters[i]);
         if (pCenter == *pSplitCenter)
             // assign new addr. of pPlistCenter back to _split()
             *pSplitCenter = &(pNewCenters[i]);
 
-        pCenter = pCenter->pNextCenter;
+        pLastCenter = &(pNewCenters[i]);
+        pCenter     = pCenter->pNextCenter;
     }
     pNewCenters[0].totalCenters = oldCenterCnt + 1;
 
@@ -572,8 +541,8 @@ void __split(int       index,
         (*pSplitCenter)->w += splitFraction * sigma;
         pNewSplit->w       -= splitFraction * sigma;
     } else if (1 == index) {
-        (*pSplitCenter)->x += splitFraction * sigma;
-        pNewSplit->x       -= splitFraction * sigma;
+        ((*pSplitCenter)->x) += splitFraction * sigma;
+        (pNewSplit->x)       -= splitFraction * sigma;
     } else if (2 == index) {
         (*pSplitCenter)->y += splitFraction * sigma;
         pNewSplit->y       -= splitFraction * sigma;
@@ -587,15 +556,13 @@ void __split(int       index,
 }
 
 int _lump(int      changeFlag,
-           int     *pLumpFlag,
-           int      splitFlag,
-           Center **pCenters,
-           double   lumpThresh,
-           int      lumpPairMaxPerIt)
+          int     *pLumpFlag,
+          int      splitFlag,
+          Center **pCenters,
+          double   lumpThresh,
+          int      lumpPairMaxPerIt)
 {
     // step 9
-    printf("LUMP\n");
-
     int clusterNum = (*pCenters)[0].totalCenters;
 
     *pLumpFlag = 0;
@@ -617,7 +584,6 @@ int _lump(int      changeFlag,
         double  dist;
         int     lumpCnt = 0;
 
-        pDistHead->pNext = NULL;
         pCenter1 = *pCenters;
         for (i = 0; i < (*pCenters)[0].totalCenters - 1; i++) {
             pCenter2 = pCenter1->pNextCenter;
@@ -635,7 +601,7 @@ int _lump(int      changeFlag,
                     if (1 == lumpCnt) // first insert
                         pDistHead = pNewDist;
                     else {
-                        pDist = pDistHead;
+                        pDist     = pDistHead;
                         pLastDist = NULL;
                         while (NULL != pDist && dist > pDist->dist) {
                             pLastDist = pDist;
@@ -697,7 +663,7 @@ int _lump(int      changeFlag,
                                        pCenter2->totalMembers * pCenter2->z) /
                                        totalMember;
                 }
-                Center *pCenter = *pCenters;
+                Center *pCenter     = *pCenters;
                 Center *pLastCenter = NULL;
                 while (NULL != pCenter) {
                     // find the ought to be deleted center
@@ -710,7 +676,6 @@ int _lump(int      changeFlag,
                     pLastCenter = pCenter;
                     pCenter     = pCenter->pNextCenter;
                 }
-
                 clusterNum--;
                 pDist = pDist->pNext;
             }
