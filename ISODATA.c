@@ -98,7 +98,6 @@ double twoNorm(FVector a, FVector b);
 
 int main(int argc, char **argv)
 {
-    int   i;
     FILE *fp;
 
     fp = fopen(DATA_PATH, "r");
@@ -107,22 +106,24 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    Center *pCenters = calloc(INIT_FEATURE_VECTOR_NUM, sizeof(Center));
-    int centerNdx = 0;
-    FVector *pFVectors = calloc(INIT_FEATURE_VECTOR_NUM, sizeof(FVector));
-    int fVectorNdx = 0;
-    readData(fp, &pCenters, &centerNdx, &pFVectors, &fVectorNdx);
-
-    int splitFlag[ITERATION_MAX];
-    int lumpFlag[ITERATION_MAX];
+    int      i;
+    int      loopFlag   = 1;
+    Center  *pCenters   = calloc(INIT_FEATURE_VECTOR_NUM, sizeof(Center));
+    FVector *pFVectors  = calloc(INIT_FEATURE_VECTOR_NUM, sizeof(FVector));
+    int      centerNdx  = 0;
+    int      fVectorNdx = 0;
+    int      splitFlag[ITERATION_MAX];
+    int      lumpFlag[ITERATION_MAX];
     /* flag meaning: 0: splitting or lumping starts
      *               1: splitting or lumping is completed successfully
      *               2: flag's initial state after the i'th iteration
      * ************************************************************************/
+
+    readData(fp, &pCenters, &centerNdx, &pFVectors, &fVectorNdx);
+
     // step 1: initialize {split,lump}Flag
     for (i = 0; i < ITERATION_MAX; i++)
         splitFlag[i] = lumpFlag[i] = 2;
-    int loopFlag = 1;
     while (1 == loopFlag)
         loopFlag = isodata(&pCenters, pFVectors, fVectorNdx,
                            DESIRED_CLUSTER_NUM, CLUSTER_SIZE_MIN,
@@ -130,7 +131,7 @@ int main(int argc, char **argv)
                            LUMP_PAIR_MAX_PER_IT, ITERATION_MAX, EPSILON,
                            splitFlag, lumpFlag);
 
-    Center *pCenter = pCenters;
+    Center  *pCenter = pCenters;
     FVector *pMember;
     while (NULL != pCenter) {
         printf("\nIn center (%f, %f, %f, %f), total member #: %d\n",
@@ -445,6 +446,7 @@ int _split(int      changeFlag,
 
     int    candidateNdx;
     double maxSigma;
+
     *pSplitFlag = 0;
     pCenter     = &((*pCenters)[0]);
     for (i = 0; i < oldClusterNum; i++) {
@@ -534,9 +536,7 @@ void __split(int       index,
     Center *pNewSplit = &(pNewCenters[oldCenterCnt]);
     *pNewSplit = **pSplitCenter;
     pNewSplit->pNextCenter = NULL;
-
     pNewCenters[oldCenterCnt - 1].pNextCenter = pNewSplit;
-
     if (0 == index) {
         (*pSplitCenter)->w += splitFraction * sigma;
         pNewSplit->w       -= splitFraction * sigma;
@@ -550,7 +550,6 @@ void __split(int       index,
         (*pSplitCenter)->z += splitFraction * sigma;
         pNewSplit->z       -= splitFraction * sigma;
     }
-
     free(*pCenters);
     *pCenters = pNewCenters;
 }
