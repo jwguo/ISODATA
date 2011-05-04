@@ -229,18 +229,9 @@ int isodata(Center  *pCenters,
     int      changeFlag;
     int      clusterCntChangeFlag = 0;
     int      realClusterNum;
-    //Center  *pNewCenters  = calloc(centerNdx, sizeof(Center));
-    //int      newCenterNdx = centerNdx;
     FVector *pMember;
     int      memberCnt;
     Center  *pCenter;
-
-    //realClusterNum = centerNdx;
-    //pNewCenters[0] = pCenters[0];
-    //for (i = 1; i < newCenterNdx; i++) {
-    //    pNewCenters[i] = pCenters[i];
-    //    pNewCenters[i-1].pNextCenter = &(pNewCenters[i]); // !! free
-    //}
 
     // step 2: classify sample feature vectors
     changeFlag = 1;
@@ -455,7 +446,6 @@ int _split(int     changeFlag,
                 // split
                 __split(j, sigma[i][j], pCenter, pCenters, splitFraction);
                 *pSplitFlag = 1;
-                (*realClusterNum)++;
                 break;
             }
         pCenter = pCenter->pNextCenter;
@@ -496,6 +486,7 @@ void __split(int      index,
         pLastCenter = pCenter;
         pCenter     = pCenter->pNextCenter;
     }
+    pNewCenters[0].totalCenters = oldCenterCnt + 1;
 
     pSplitCenter->pNextCenter  = NULL;
     pSplitCenter->pNextMember  = NULL;
